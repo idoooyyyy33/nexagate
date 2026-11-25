@@ -1,0 +1,101 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    restart: unless-stopped
+    environment:
+      MQTT_USERNAME: ${MQTT_USERNAME:?Set MQTT_USERNAME in .env}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?Set MQTT_PASSWORD in .env}
+      MOSQUITTO_CONFIG: ${MOSQUITTO_CONFIG:-mosquitto.conf}
+    command:
+      - /bin/sh
+      - -c
+      - mosquitto_passwd -b -c /mosquitto/data/passwd "$$MQTT_USERNAME" "$$MQTT_PASSWORD" && exec mosquitto -c "/mosquitto/config/$${MOSQUITTO_CONFIG}"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto.tls.conf:/mosquitto/config/mosquitto.tls.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - ./mosquitto/certs:/mosquitto/certs:ro
+    ports:
+      - "${MQTT_HOST_BIND:-127.0.0.1}:1883:1883"
+      - "${MQTT_HOST_BIND:-127.0.0.1}:8883:8883"
+    networks:
+      - lock-net
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      UID_ENCRYPTION_KEY: ${UID_ENCRYPTION_KEY:?Set UID_ENCRYPTION_KEY in .env}
+      UID_HMAC_KEY: ${UID_HMAC_KEY:?Set UID_HMAC_KEY in .env}
+      DB_PATH: /app/data/rfid.sqlite
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD in .env}
+      MQTT_URL: mqtt://mosquitto:1883
+      MQTT_USERNAME: ${MQTT_USERNAME:?Set MQTT_USERNAME in .env}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?Set MQTT_PASSWORD in .env}
+      MQTT_CLIENT_ID: rfid-server
+      DEFAULT_DEVICE_NAME: ${DEFAULT_DEVICE_NAME:-Pintu Utama}
+      DEFAULT_DEVICE_TOPIC_PREFIX: ${DEFAULT_DEVICE_TOPIC_PREFIX:-ti2024j/kel3/akses}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      OFFLINE_THRESHOLD_MINUTES: ${OFFLINE_THRESHOLD_MINUTES:-5}
+      COMMAND_ACK_TIMEOUT_MS: ${COMMAND_ACK_TIMEOUT_MS:-8000}
+    volumes:
+      - rfid_data:/app/data
+    depends_on:
+      - mosquitto
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - lock-net
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${WEB_HOST_BIND:-0.0.0.0}:8080:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - lock-net
+
+  simulator:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    command: ["node", "server/dist/simulator.js"]
+    profiles: ["demo"]
+    restart: unless-stopped
+    environment:
+      MQTT_URL: mqtt://mosquitto:1883
+      MQTT_USERNAME: ${MQTT_USERNAME:?Set MQTT_USERNAME in .env}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?Set MQTT_PASSWORD in .env}
+      MQTT_CLIENT_ID: rfid-simulator
+      DEFAULT_DEVICE_TOPIC_PREFIX: ${DEFAULT_DEVICE_TOPIC_PREFIX:-ti2024j/kel3/akses}
+      SIMULATOR_INTERVAL_MS: ${SIMULATOR_INTERVAL_MS:-12000}
+    depends_on:
+      - mosquitto
+    networks:
+      - lock-net
+
+volumes:
+  rfid_data:
+  mosquitto_data:
+
+networks:
+  lock-net:
+    driver: bridge

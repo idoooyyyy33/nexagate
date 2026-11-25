@@ -1,0 +1,14 @@
+process.env.NODE_ENV ??= 'test';
+process.env.PORT ??= '3000';
+process.env.WEB_ORIGIN ??= 'http://localhost:5173';
+process.env.JWT_SECRET ??= 'test-session-secret-with-at-least-32-characters';
+process.env.UID_ENCRYPTION_KEY ??= '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+process.env.UID_HMAC_KEY ??= 'test-uid-hmac-key-with-at-least-32-characters';
+process.env.DB_PATH = ':memory:';
+process.env.BOOTSTRAP_ADMIN_USERNAME ??= 'test-admin';
+process.env.BOOTSTRAP_ADMIN_PASSWORD ??= 'test-admin-password-123';
+process.env.MQTT_URL ??= 'mqtt://localhost:1883';
+process.env.MQTT_USERNAME ??= 'test-user';
+process.env.MQTT_PASSWORD ??= 'test-password-123';
+process.env.TELEGRAM_BOT_TOKEN = '';
+process.env.TELEGRAM_CHAT_ID = '';
